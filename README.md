@@ -10,11 +10,6 @@
 
 - Efficient Learning: Move beyond static notes. Actively engage with your study material to improve retention and recall.
 ----------------------------------
-**🚀 Getting Started**
-
-Follow these steps to get a copy of the project up and running on your local machine.
-
-----------------------------
 
 **Prerequisites**
 
