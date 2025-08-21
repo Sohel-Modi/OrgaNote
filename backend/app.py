@@ -876,6 +876,38 @@ def get_quiz(quiz_id):
         return jsonify({"message": f"Failed to retrieve quiz: {str(e)}"}), 500
 
 
+@app.route("/api/my-quizzes", methods=["GET"])
+@verify_firebase_token
+def get_my_quizzes():
+    if db is None:
+        return jsonify({"message": "Database not connected."}), 500
+    try:
+        user_uid = request.current_user.get('uid')
+        quizzes_cursor = db.quizzes.find(
+            {"user_id": user_uid}
+        ).sort("generation_date", -1)
+        quizzes_list = []
+        for quiz in quizzes_cursor:
+            note_title = "Untitled Note"
+            if 'note_id' in quiz and isinstance(quiz['note_id'], ObjectId):
+                note = db.notes.find_one({"_id": quiz['note_id']})
+                if note:
+                    note_title = note.get('original_filename', 'Untitled Note')
+            quizzes_list.append({
+                "id": str(quiz['_id']),
+                "note_id": str(quiz['note_id']),
+                "note_title": note_title,
+                "generation_date": quiz['generation_date'],
+            })
+        return jsonify({
+            "message": "Quizzes retrieved successfully.",
+            "quizzes": quizzes_list
+        }), 200
+    except Exception as e:
+        print(f"Error retrieving quizzes for user {user_uid}: {e}")
+        return jsonify({"message": f"Failed to retrieve quizzes: {str(e)}"}), 500
+
+
 @app.route("/api/rag-query", methods=["POST"])
 @verify_firebase_token # Ensure only authenticated users can ask RAG queries
 def rag_query():
