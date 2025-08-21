@@ -31,7 +31,7 @@ backend/uploads/
 # Ignore all dependencies folders
 **/node_modules/
 # Ignore Python virtual environment
-**/venv/
+**/Notes_env/
 # Ignore environment variables
 **/.env
 
@@ -63,7 +63,7 @@ frontend/package.json
 # We are ignoring all backend dependencies and environment files above
 # so these specific entries are not needed
 backend/node_modules
-backend/venv
+backend/Notes_env
 backend/.env
 backend/package-lock.json
 backend/package.json
