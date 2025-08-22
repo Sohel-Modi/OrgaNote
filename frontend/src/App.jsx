@@ -11,6 +11,7 @@ import HomePage from './components/HomePage.tsx';
 import Dashboard from './components/Dashboard';
 import Profile from './components/Profile';
 import QuizzesList from './components/QuizzesList';
+//import MyNotesPage from './components/MyNotesPage'; // Adjust the path as needed
 //import GamesPage from './components/GamesPage'; // Import the new GamesPage component
 import logo from './assets/logo.png';
 
@@ -168,6 +169,15 @@ function App() {
               >
                 Dashboard
               </Button>
+              {/* <Button
+                variant="text"
+                onClick={() => { setCurrentView('my-notes'); setSelectedNoteId(null); setUploadMessage(null); setError(null); setCurrentQuizId(null); }} // <--- CHANGE VIEW TO 'my-notes'
+                color={currentView === 'my-notes' ? 'primary' : 'inherit'}
+                sx={{ textTransform: 'none', ml: 1, fontWeight: currentView === 'my-notes' ? 'bold' : 'normal' }}
+              >
+                My Notes
+              </Button>
+               */}
               <Button
                 variant="text"
                 onClick={() => { setCurrentView('list'); setSelectedNoteId(null); setUploadMessage(null); setError(null); setCurrentQuizId(null); }}
