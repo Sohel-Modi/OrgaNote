@@ -7,6 +7,10 @@ from flask_cors import CORS
 from functools import wraps
 from werkzeug.utils import secure_filename
 import json
+# Metrics and comparison imports
+import Levenshtein
+import string
+
 
 # Image processing and OCR imports
 import cv2
@@ -51,6 +55,20 @@ app = Flask(__name__)
 CORS(app)
 
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'a_super_secret_key_for_dev') # Add a secret key for session management (Flask security)
+
+
+# --- Ground Truth Folder Configuration ---
+GROUND_TRUTH_FOLDER = os.path.join(app.root_path, 'Ground_Truth')
+if not os.path.exists(GROUND_TRUTH_FOLDER):
+    print("Warning: Ground truth folder not found. Evaluation metrics will be skipped.")
+
+# --- Results Folder Configuration (NEW) ---
+RESULTS_FOLDER = os.path.join(app.root_path, 'Evaluation_Results')
+if not os.path.exists(RESULTS_FOLDER):
+    os.makedirs(RESULTS_FOLDER)
+    print("Created results folder at: " + RESULTS_FOLDER)
+
+
 
 # --- Upload Folder Configuration ---
 # Define an absolute path to store uploaded notes
@@ -239,6 +257,71 @@ def verify_firebase_token(f):
 #             text += page.get_text()
 #     return text
 
+def get_ground_truth(original_filename):
+    """
+    Retrieves ground truth text and keywords for a given filename.
+    Assumes files are named: <filename>_text.txt and <filename>_keywords.txt
+    """
+    base_name = os.path.splitext(original_filename)[0]
+    
+    text_path = os.path.join(GROUND_TRUTH_FOLDER, f"{base_name}_text.txt")
+    keywords_path = os.path.join(GROUND_TRUTH_FOLDER, f"{base_name}_keywords.txt")
+
+    ground_truth_text = ""
+    ground_truth_keywords = []
+
+    try:
+        with open(text_path, 'r', encoding='utf-8') as f:
+            ground_truth_text = f.read().strip()
+        
+        with open(keywords_path, 'r', encoding='utf-8') as f:
+            # --- UPDATED CODE FOR KEYWORDS ---
+            keyword_line = f.read().strip()
+            # Split by comma and strip whitespace from each keyword
+            ground_truth_keywords = [k.strip() for k in keyword_line.split(',')]
+            # --- END UPDATED CODE ---
+    except FileNotFoundError:
+        print(f"Ground truth files for {original_filename} not found.")
+    
+    return ground_truth_text, ground_truth_keywords
+
+def calculate_ocr_accuracy(ground_truth_text, extracted_text):
+    """Calculates character-level accuracy using Levenshtein distance."""
+    if not ground_truth_text:
+        return None
+    
+    distance = Levenshtein.distance(ground_truth_text, extracted_text)
+    accuracy = (1.0 - (distance / len(ground_truth_text))) * 100
+    
+    return accuracy
+
+def calculate_keyword_metrics(ground_truth_keywords, extracted_keywords):
+    """Calculates precision, recall, and F1-score for keywords, ignoring punctuation."""
+    if not ground_truth_keywords:
+        print("DEBUG: Ground truth keywords list is empty.")
+        return None, None, None
+    
+    # Create a translator to remove all punctuation
+    translator = str.maketrans('', '', string.punctuation)
+    
+    # Clean and convert to lowercase sets, removing punctuation
+    ground_truth_set = set(k.lower().translate(translator) for k in ground_truth_keywords)
+    extracted_set = set(k.lower().translate(translator) for k in extracted_keywords)
+    
+    # --- ADD THESE DEBUG PRINT STATEMENTS ---
+    print(f"DEBUG: Ground Truth Set: {ground_truth_set}")
+    print(f"DEBUG: Extracted Set: {extracted_set}")
+    print(f"DEBUG: Intersection: {ground_truth_set.intersection(extracted_set)}")
+    # --- END DEBUG PRINTS ---
+
+    true_positives = len(ground_truth_set.intersection(extracted_set))
+    
+    precision = true_positives / len(extracted_set) if extracted_set else 0
+    recall = true_positives / len(ground_truth_set) if ground_truth_set else 0
+    f1_score = (2 * precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
+
+    return precision, recall, f1_score
+
 
 # --- API Routes ---
 
@@ -362,30 +445,32 @@ def upload_note():
     for i, img_pil in enumerate(images_to_process):
         try:
             gray_img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2GRAY) # Ensure grayscale
-            denoised_img = cv2.fastNlMeansDenoising(gray_img, None, 30, 7, 21)
-            binary_img = cv2.adaptiveThreshold(
-                denoised_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            )
+            
+            #----- Experimentation1 Only EascyOCR-----
+            # denoised_img = cv2.fastNlMeansDenoising(gray_img, None, 30, 7, 21)
+            # binary_img = cv2.adaptiveThreshold(
+            #     denoised_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+            # )
 
             # --- NEW: Morphological Transformations (e.g., Closing operation) ---
             # Define a kernel (structuring element) for the morphological operation
             # A 3x3 or 5x5 rectangular kernel is common
-            kernel = np.ones((3,3), np.uint8) # 3x3 square kernel
+            # kernel = np.ones((3,3), np.uint8) # 3x3 square kernel
             # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Alternative way to define
 
             # 'Closing' operation: Dilation followed by Erosion.
             # Good for closing small holes inside foreground objects and connecting broken parts.
-            processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, kernel)
+            # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, kernel)
 
             # Optional: 'Opening' operation (Erosion followed by Dilation).
             # Good for removing small objects (noise) from the foreground.
-            processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel)
+            # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel)
 
             # Use 'processed_img' for OCR instead of 'binary_img'
-            results = reader.readtext(processed_img)
+            # results = reader.readtext(processed_img)
 
-            # # --- Perform OCR using EasyOCR ---
-            #     results = reader.readtext(binary_img) # Pass the pre-processed binary image
+            # --- Perform OCR using EasyOCR ---
+            results = reader.readtext(gray_img) 
 
             page_text = ""
             page_confidences = []
@@ -420,36 +505,37 @@ def upload_note():
     extracted_text = "\n\n".join(full_text_content) # Combine text from all pages
     final_text_for_db = extracted_text # Default to raw OCR text
 
+    #------ Experimentation1 Only EascyOCR-----
     # --- LLM Post-processing for Accuracy Improvement ---
     # Only process if there's significant text and LLM client is available
-    if openai_client and len(extracted_text.strip()) > 50: # Only call LLM if there's enough text
-        print("Attempting LLM post-processing for OCR text...")
-        try:
-            llm_response = openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[
-                        # System message: Make it explicitly clear about language handling
-                        {"role": "system", "content": "You are a highly accurate text corrector and interpreter. Your task is to take raw, potentially erroneous OCR text, correct typos, fix grammar, make it readable, and infer contextually accurate words where the OCR failed. **Crucially, you must preserve the original language of the input text.** Do not translate. If the input is Hindi, your output must be in Hindi. If the input is Marathi, output in Marathi. If English, output in English. Do not add new information not present in the original text. Maintain the original meaning. Respond only with the corrected text."},
-                        # User message: No change here, as it contains the raw OCR text
-                        {"role": "user", "content": f"Here is the OCR output. Please clean it up and make it coherent, preserving the original language:\n\n{extracted_text}"}
-                    ],
-                    temperature=0.1,
-                    max_tokens=1000
-            )
-            cleaned_llm_output = llm_response.choices[0].message.content.strip()
-            if cleaned_llm_output: # Ensure LLM returned something
-                final_text_for_db = cleaned_llm_output
-                print("LLM post-processing successful. Text cleaned.")
-            else:
-                print("LLM post-processing returned empty. Using raw OCR text.")
+    # if openai_client and len(extracted_text.strip()) > 50: # Only call LLM if there's enough text
+    #     print("Attempting LLM post-processing for OCR text...")
+    #     try:
+    #         llm_response = openai_client.chat.completions.create(
+    #                 model="gpt-3.5-turbo",
+    #                 messages=[
+    #                     # System message: Make it explicitly clear about language handling
+    #                     {"role": "system", "content": "You are a highly accurate text corrector and interpreter. Your task is to take raw, potentially erroneous OCR text, correct typos, fix grammar, make it readable, and infer contextually accurate words where the OCR failed. **Crucially, you must preserve the original language of the input text.** Do not translate. If the input is Hindi, your output must be in Hindi. If the input is Marathi, output in Marathi. If English, output in English. Do not add new information not present in the original text. Maintain the original meaning. Respond only with the corrected text."},
+    #                     # User message: No change here, as it contains the raw OCR text
+    #                     {"role": "user", "content": f"Here is the OCR output. Please clean it up and make it coherent, preserving the original language:\n\n{extracted_text}"}
+    #                 ],
+    #                 temperature=0.1,
+    #                 max_tokens=1000
+    #         )
+    #         cleaned_llm_output = llm_response.choices[0].message.content.strip()
+    #         if cleaned_llm_output: # Ensure LLM returned something
+    #             final_text_for_db = cleaned_llm_output
+    #             print("LLM post-processing successful. Text cleaned.")
+    #         else:
+    #             print("LLM post-processing returned empty. Using raw OCR text.")
 
-        except Exception as llm_error:
-            print(f"Error during LLM post-processing: {llm_error}. Using raw OCR text.")
-            # final_text_for_db remains extracted_text (raw OCR)
-    elif not openai_client:
-        print("OpenAI client not initialized. Skipping LLM post-processing.")
-    else:
-        print("Extracted text too short for LLM post-processing. Skipping.")
+    #     except Exception as llm_error:
+    #         print(f"Error during LLM post-processing: {llm_error}. Using raw OCR text.")
+    #         # final_text_for_db remains extracted_text (raw OCR)
+    # elif not openai_client:
+    #     print("OpenAI client not initialized. Skipping LLM post-processing.")
+    # else:
+    #     print("Extracted text too short for LLM post-processing. Skipping.")
 
 
     # --- Keyword Extraction with KeyBERT ---
@@ -463,13 +549,13 @@ def upload_note():
             # diversity: Higher diversity means less similar keywords are chosen (0 to 1)
             keywords_with_scores = keybert_model.extract_keywords(
                 docs=final_text_for_db,
-                keyphrase_ngram_range=(1, 2),
+                keyphrase_ngram_range=(1, 1),
                 # We are NOT using stop_words='english' here.
                 # This is because the multilingual model's embeddings are robust,
                 # and the LLM cleaning handles basic words.
                 # If you find too many common words, you can re-add `stop_words='english'`
                 # or custom English stop words.
-                top_n=10, # Extract top 10 keywords/phrases
+                top_n= 5, # Extract top 10 keywords/phrases
                 diversity=0.7 # Encourage a good variety of keywords
             )
             # Extract just the keyword string, discarding the score for storage
@@ -497,6 +583,43 @@ def upload_note():
         "topics": extracted_keywords, # Correctly use extracted_keywords
         "resource_links": []
     }
+
+    # --- NEW: Evaluation Metrics Calculation and Logging ---
+    print("\n--- Starting Automated Performance Evaluation ---")
+    ground_truth_text, ground_truth_keywords = get_ground_truth(filename)
+    results_filename = f"{os.path.splitext(filename)[0]}_results.txt"
+    results_path = os.path.join(RESULTS_FOLDER, results_filename)
+    
+    Experimentation_number = "1" # Manually change this for each test (e.g., "1", "2", "3", "4")
+    
+    if ground_truth_text:
+        # Calculate OCR Accuracy
+        accuracy = calculate_ocr_accuracy(ground_truth_text, final_text_for_db)
+        print(f"OCR Accuracy: {accuracy:.2f}%")
+        
+        # Calculate Keyword Metrics
+        if ground_truth_keywords:
+            precision, recall, f1score = calculate_keyword_metrics(ground_truth_keywords, extracted_keywords)
+            print(f"Keyword Precision: {precision:.2f}")
+            print(f"Keyword Recall: {recall:.2f}")
+            print(f"Keyword F1-Score: {f1score:.2f}")
+        else:
+            print("Ground truth keywords not available. Skipping keyword evaluation.")
+    else:
+        print("Ground truth text not available. Skipping OCR and keyword evaluation.")
+
+    with open(results_path, 'w') as f:
+        f.write(f"Combination: {Experimentation_number}\n")
+        f.write(f"Filename: {filename}\n")
+        f.write(f"OCR Accuracy: {accuracy:.2f}%\n")
+        f.write(f"Keyword Precision: {precision:.2f}\n")
+        f.write(f"Keyword Recall: {recall:.2f}\n")
+        f.write(f"Keyword F1-Score: {f1score:.2f}\n")
+    
+    print(f"Results saved to: {results_path}")
+
+    print("--- Performance Evaluation Complete ---\n")
+
 
 
     # --- RAG: Text Chunking and Vector Storage ---

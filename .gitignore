@@ -77,6 +77,8 @@ backend/uploads
 poppler-24.08.0/
 Progress_Screenshots/
 Test_files/
+backend/Ground_Truth/
+Evaluation_Results/
 
 # Ignore any other files
 app_backend_old_code.docx
