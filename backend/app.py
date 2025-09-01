@@ -257,6 +257,13 @@ def verify_firebase_token(f):
 #             text += page.get_text()
 #     return text
 
+#  helper function to your app.py file to convert image data into a Base64 string
+import base64
+
+def encode_image(image_path):
+    with open(image_path, "rb") as image_file:
+        return base64.b64encode(image_file.read()).decode('utf-8')
+
 def get_ground_truth(original_filename):
     """
     Retrieves ground truth text and keywords for a given filename.
@@ -389,121 +396,186 @@ def upload_note():
         return jsonify({"message": f"Failed to save uploaded file: {e}"}), 500
 
 
-    extracted_text = ""
-    images_to_process = []
+    # extracted_text = ""
+    # images_to_process = []
 
     
     
-    # --- Handle PDF to Image Conversion ---
+    # # --- Handle PDF to Image Conversion ---
+    # if file_extension == '.pdf':
+    #     text = ""
+    #     print("PDF is not digital, proceeding with image conversion for OCR.")
+    #     try:
+    #         # Get Poppler path from environment variable (for Windows)
+    #         poppler_path = os.getenv("POPPLER_PATH")
+    #         if poppler_path and not os.path.exists(poppler_path):
+    #             print(f"Warning: POPPLER_PATH from .env not found: {poppler_path}. Falling back to system PATH.")
+    #             poppler_path = None # Allow pdf2image to search system PATH
+
+    #         # Convert PDF pages to PIL Image objects
+    #         pdf_pages = convert_from_path(
+    #             file_path,
+    #             dpi=300,        # Higher DPI for better OCR accuracy
+    #             #grayscale=True, # Convert to grayscale directly
+    #             poppler_path=poppler_path # Use specified Poppler path
+    #         )
+    #         images_to_process.extend(pdf_pages)
+    #         print(f"Converted {len(pdf_pages)} PDF page(s) to images for OCR.")
+    #     except Exception as e:
+    #         os.remove(file_path) # Clean up uploaded file if conversion fails
+    #         print(f"Error converting PDF to images: {e}")
+    #         return jsonify({"message": f"Failed to convert PDF to images. Ensure Poppler is installed and configured: {e}"}), 500
+    # # --- Handle Image Files (JPG, PNG) ---
+    # elif file_extension in ['.jpg', '.jpeg', '.png']:
+    #     try:
+    #         image = cv2.imread(file_path)
+    #         if image is None:
+    #             raise ValueError("OpenCV failed to read the image file.")
+    #         # Convert OpenCV image (BGR) to PIL Image (RGB) for consistency, then to numpy for processing
+    #         images_to_process.append(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)))
+    #         print(f"Loaded image file {filename} for OCR.")
+    #     except Exception as e:
+    #         os.remove(file_path)
+    #         print(f"Error loading image file for OCR: {e}")
+    #         return jsonify({"message": f"Failed to load image file for OCR: {e}"}), 500
+    # else:
+    #     os.remove(file_path) # Remove unsupported file
+    #     return jsonify({"message": f"Unsupported file type: {file_extension}. Only JPG, PNG, and PDF are supported."}), 400
+
+
+    # # --- Process each image for OCR ---
+    # full_text_content = []
+    # if not images_to_process:
+    #     os.remove(file_path) # Remove if no images were derived for OCR
+    #     return jsonify({"message": "No valid pages or images found for OCR processing."}), 400
+
+    # for i, img_pil in enumerate(images_to_process):
+    #     try:
+    #         gray_img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2GRAY) # Ensure grayscale
+            
+    #         #----- Experimentation1 Only EascyOCR-----
+    #         # denoised_img = cv2.fastNlMeansDenoising(gray_img, None, 30, 7, 21)
+    #         # binary_img = cv2.adaptiveThreshold(
+    #         #     denoised_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
+    #         # )
+
+    #         # --- NEW: Morphological Transformations (e.g., Closing operation) ---
+    #         # Define a kernel (structuring element) for the morphological operation
+    #         # A 3x3 or 5x5 rectangular kernel is common
+    #         # kernel = np.ones((3,3), np.uint8) # 3x3 square kernel
+    #         # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Alternative way to define
+
+    #         # 'Closing' operation: Dilation followed by Erosion.
+    #         # Good for closing small holes inside foreground objects and connecting broken parts.
+    #         # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, kernel)
+
+    #         # Optional: 'Opening' operation (Erosion followed by Dilation).
+    #         # Good for removing small objects (noise) from the foreground.
+    #         # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel)
+
+    #         # Use 'processed_img' for OCR instead of 'binary_img'
+    #         # results = reader.readtext(processed_img)
+
+    #         # --- Perform OCR using EasyOCR ---
+    #         results = reader.readtext(gray_img) 
+
+    #         page_text = ""
+    #         page_confidences = []
+
+    #         if results: # Check if any text was detected on the page
+    #             for result in results:
+    #                 text = result[1] # Recognized text
+    #                 confidence = result[2] # Confidence score (0 to 1)
+
+    #                 page_text += text + "\n" # Append text
+    #                 page_confidences.append(confidence) # Collect confidence
+
+    #             # Calculate average confidence for the page
+    #             avg_page_confidence = np.mean(page_confidences) if page_confidences else 0
+    #             print(f"OCR processed page {i+1}. Average Confidence: {avg_page_confidence:.2f}")
+
+    #         else: # No text detected on this page
+    #             print(f"OCR processed page {i+1}. No text detected.")
+    #             avg_page_confidence = 0
+
+    #         full_text_content.append(f"--- Page {i+1} (Confidence: {avg_page_confidence:.2f}) ---\n{page_text}")
+    #         # We can also store confidence with the note document later if desired
+
+    #     except Exception as e:
+    #         print(f"Error during OCR for page {i+1}: {e}")
+    #         full_text_content.append(f"--- Page {i+1} (OCR Failed) ---\n")
+    #         # Continue processing other pages even if one fails
+
+    # --- NEW: Combination 2 (LLM Only) ---
+    extracted_text = ""
+    base64_images = []
+    
+    # Handle PDF to Image Conversion and Base64 Encoding
     if file_extension == '.pdf':
-        text = ""
-        print("PDF is not digital, proceeding with image conversion for OCR.")
+        print("PDF detected, converting to images for LLM vision processing.")
         try:
-            # Get Poppler path from environment variable (for Windows)
             poppler_path = os.getenv("POPPLER_PATH")
             if poppler_path and not os.path.exists(poppler_path):
-                print(f"Warning: POPPLER_PATH from .env not found: {poppler_path}. Falling back to system PATH.")
-                poppler_path = None # Allow pdf2image to search system PATH
-
-            # Convert PDF pages to PIL Image objects
-            pdf_pages = convert_from_path(
-                file_path,
-                dpi=300,        # Higher DPI for better OCR accuracy
-                #grayscale=True, # Convert to grayscale directly
-                poppler_path=poppler_path # Use specified Poppler path
-            )
-            images_to_process.extend(pdf_pages)
-            print(f"Converted {len(pdf_pages)} PDF page(s) to images for OCR.")
-        except Exception as e:
-            os.remove(file_path) # Clean up uploaded file if conversion fails
-            print(f"Error converting PDF to images: {e}")
-            return jsonify({"message": f"Failed to convert PDF to images. Ensure Poppler is installed and configured: {e}"}), 500
-    # --- Handle Image Files (JPG, PNG) ---
-    elif file_extension in ['.jpg', '.jpeg', '.png']:
-        try:
-            image = cv2.imread(file_path)
-            if image is None:
-                raise ValueError("OpenCV failed to read the image file.")
-            # Convert OpenCV image (BGR) to PIL Image (RGB) for consistency, then to numpy for processing
-            images_to_process.append(Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB)))
-            print(f"Loaded image file {filename} for OCR.")
+                poppler_path = None
+            
+            pdf_pages = convert_from_path(file_path, dpi=300, poppler_path=poppler_path)
+            
+            # Save each page to a temporary file, encode it, and then delete the file
+            for i, page_img in enumerate(pdf_pages):
+                temp_img_path = os.path.join(app.config['UPLOAD_FOLDER'], f"temp_page_{int(time.time())}_{i}.jpg")
+                page_img.save(temp_img_path, 'JPEG')
+                base64_images.append(encode_image(temp_img_path))
+                os.remove(temp_img_path)
+            print(f"Converted {len(base64_images)} PDF page(s) to Base64 for LLM.")
         except Exception as e:
             os.remove(file_path)
-            print(f"Error loading image file for OCR: {e}")
-            return jsonify({"message": f"Failed to load image file for OCR: {e}"}), 500
+            print(f"Error converting PDF to images: {e}")
+            return jsonify({"message": f"Failed to convert PDF to images for LLM: {e}"}), 500
+    
+    # Handle direct Image Files (JPG, PNG)
+    elif file_extension in ['.jpg', '.jpeg', '.png']:
+        print(f"Image file detected, encoding for LLM vision processing.")
+        base64_images.append(encode_image(file_path))
     else:
-        os.remove(file_path) # Remove unsupported file
+        os.remove(file_path)
         return jsonify({"message": f"Unsupported file type: {file_extension}. Only JPG, PNG, and PDF are supported."}), 400
 
-
-    # --- Process each image for OCR ---
+    # Process each Base64 encoded image with LLM Vision API
     full_text_content = []
-    if not images_to_process:
-        os.remove(file_path) # Remove if no images were derived for OCR
-        return jsonify({"message": "No valid pages or images found for OCR processing."}), 400
-
-    for i, img_pil in enumerate(images_to_process):
+    if openai_client and base64_images:
+        print("Attempting LLM-based text extraction...")
         try:
-            gray_img = cv2.cvtColor(np.array(img_pil), cv2.COLOR_RGB2GRAY) # Ensure grayscale
+            for b64_image in base64_images:
+                llm_response = openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "Extract all text from this image as accurately as possible. Pay close attention to handwritten content and formatting. Do not add any new information."},
+                            {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b64_image}"}}
+                        ]
+                    }],
+                    temperature=0.1,
+                    max_tokens=4000
+                )
+                full_text_content.append(llm_response.choices[0].message.content.strip())
             
-            #----- Experimentation1 Only EascyOCR-----
-            # denoised_img = cv2.fastNlMeansDenoising(gray_img, None, 30, 7, 21)
-            # binary_img = cv2.adaptiveThreshold(
-            #     denoised_img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2
-            # )
-
-            # --- NEW: Morphological Transformations (e.g., Closing operation) ---
-            # Define a kernel (structuring element) for the morphological operation
-            # A 3x3 or 5x5 rectangular kernel is common
-            # kernel = np.ones((3,3), np.uint8) # 3x3 square kernel
-            # kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3,3)) # Alternative way to define
-
-            # 'Closing' operation: Dilation followed by Erosion.
-            # Good for closing small holes inside foreground objects and connecting broken parts.
-            # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_CLOSE, kernel)
-
-            # Optional: 'Opening' operation (Erosion followed by Dilation).
-            # Good for removing small objects (noise) from the foreground.
-            # processed_img = cv2.morphologyEx(binary_img, cv2.MORPH_OPEN, kernel)
-
-            # Use 'processed_img' for OCR instead of 'binary_img'
-            # results = reader.readtext(processed_img)
-
-            # --- Perform OCR using EasyOCR ---
-            results = reader.readtext(gray_img) 
-
-            page_text = ""
-            page_confidences = []
-
-            if results: # Check if any text was detected on the page
-                for result in results:
-                    text = result[1] # Recognized text
-                    confidence = result[2] # Confidence score (0 to 1)
-
-                    page_text += text + "\n" # Append text
-                    page_confidences.append(confidence) # Collect confidence
-
-                # Calculate average confidence for the page
-                avg_page_confidence = np.mean(page_confidences) if page_confidences else 0
-                print(f"OCR processed page {i+1}. Average Confidence: {avg_page_confidence:.2f}")
-
-            else: # No text detected on this page
-                print(f"OCR processed page {i+1}. No text detected.")
-                avg_page_confidence = 0
-
-            full_text_content.append(f"--- Page {i+1} (Confidence: {avg_page_confidence:.2f}) ---\n{page_text}")
-            # We can also store confidence with the note document later if desired
-
-        except Exception as e:
-            print(f"Error during OCR for page {i+1}: {e}")
-            full_text_content.append(f"--- Page {i+1} (OCR Failed) ---\n")
-            # Continue processing other pages even if one fails
-
-            
+            extracted_text = "\n\n".join(full_text_content)
+            final_text_for_db = extracted_text
+            print("LLM-based text extraction successful.")
+        except Exception as llm_error:
+            print(f"Error during LLM text extraction: {llm_error}. Skipping LLM process.")
+            extracted_text = ""
+            final_text_for_db = ""
+    else:
+        print("OpenAI client not initialized or no valid images to process. Skipping LLM text extraction.")
+        extracted_text = ""
+        final_text_for_db = ""
+    # --- END Combination 2 ---     
     
 
-    extracted_text = "\n\n".join(full_text_content) # Combine text from all pages
-    final_text_for_db = extracted_text # Default to raw OCR text
+    # extracted_text = "\n\n".join(full_text_content) # Combine text from all pages
+    # final_text_for_db = extracted_text # Default to raw OCR text
 
     #------ Experimentation1 Only EascyOCR-----
     # --- LLM Post-processing for Accuracy Improvement ---
@@ -555,7 +627,7 @@ def upload_note():
                 # and the LLM cleaning handles basic words.
                 # If you find too many common words, you can re-add `stop_words='english'`
                 # or custom English stop words.
-                top_n= 5, # Extract top 10 keywords/phrases
+                top_n= 7, # Extract top 10 keywords/phrases
                 diversity=0.7 # Encourage a good variety of keywords
             )
             # Extract just the keyword string, discarding the score for storage
@@ -590,7 +662,7 @@ def upload_note():
     results_filename = f"{os.path.splitext(filename)[0]}_results.txt"
     results_path = os.path.join(RESULTS_FOLDER, results_filename)
     
-    Experimentation_number = "1" # Manually change this for each test (e.g., "1", "2", "3", "4")
+    Experimentation_number = "2" # Manually change this for each test (e.g., "1", "2", "3", "4")
     
     if ground_truth_text:
         # Calculate OCR Accuracy
