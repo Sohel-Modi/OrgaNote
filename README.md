@@ -1,5 +1,5 @@
-# OrgaNote
-**OrgaNote** is an innovative tool designed to transform the way college students manage their notes and study for exams. By leveraging AI, it allows students to digitally organize handwritten notes and reinforce their learning through AI-generated quizzes.
+# NoteVerse
+**NoteVerse** is an innovative tool designed to transform the way college students manage their notes and study for exams. By leveraging AI, it allows students to digitally organize handwritten notes and reinforce their learning through AI-generated quizzes.
  
 -----------------------------
 **✨ Features**
@@ -25,8 +25,8 @@ Make sure you have the following installed:
 **Installation**
 1. **Clone the repository:**
 
-        git clone https://github.com/Sohel-Modi/OrgaNote.git
-        cd OrgaNote
+        git clone https://github.com/Sohel-Modi/NoteVerse.git
+        cd NoteVerse
 
 2. **Set up the backend:**
 
